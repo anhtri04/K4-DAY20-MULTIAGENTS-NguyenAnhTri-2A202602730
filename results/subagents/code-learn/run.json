@@ -1,0 +1,74 @@
+{
+  "task": "code-learn",
+  "condition": "subagents",
+  "role": "learn",
+  "error": null,
+  "timestamp": "2026-10-06T08:52:31.262045+00:00",
+  "skills_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "seconds": 171.5,
+  "tokens": {
+    "input": 346683,
+    "output": 30617,
+    "total": 377300
+  },
+  "tool_calls": 29,
+  "subagent_calls": 1,
+  "skills_read": 0,
+  "skills_modified": false,
+  "final_message": "Done. Test suite: **6 passed**.\n\n## What I changed and why\n\n**`workspace/inventory/pricing.py`**\n- `parse_price`: now strips `$` **and** thousands separators, and handles the accounting style `(12.00)` → `Decimal(\"-12.00\")` (parentheses negate, inner whitespace tolerated). Previously `\"$1,299.50\"` raised `decimal.InvalidOperation` and parentheses were ignored.\n- `apply_discount`: `quantize(..., rounding=ROUND_HALF_UP)` instead of the default banker's rounding, so `apply_discount(Decimal(\"10.05\"), 10)` is `9.05` (was `9.04`), as the docstring's \"round half up\" rule requires.\n\n**`workspace/inventory/report.py`**\n- `low_stock`: comparison changed from `<=` to strict `<` (docstring says \"strictly below\"), and the names are now `sorted(..., key=str.casefold)` so the result is alphabetical ignoring case (was unsorted input order).\n\n**`workspace/inventory/export.py`**\n- `to_csv_row`: names containing a comma or a double quote are now wrapped in double quotes with inner quotes doubled (RFC 4180), e.g. `a,b` → `\"a,b\"`, `say \"hi\"` → `\"say \"\"hi\"\"\"`.\n\n**`workspace/CHANGELOG.md`**\n- Added the four fixes under `## Unreleased`.\n\nAlso added type annotations / explicit imports and removed the generated `__pycache__` folders (they held stale pre-fix bytecode). No files under `tests/` were touched.\n\nVerification: an independent reviewer re-ran the suite plus ~20k randomized property cases against an exact half-up reference and found no docstring or spec violations; the only notes were out-of-scope/unspecified edges (newlines in names, non-US comma formats, malformed input), which I left matching the documented behavior.",
+  "score": 0.8,
+  "passed": 8,
+  "total": 10,
+  "checks": [
+    {
+      "name": "visible_suite_passes",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "tests_not_modified",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "parse_price_all_formats",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "other_caller_fixed",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "discount_rounds_half_up",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "low_stock_follows_docstring",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "csv_quoting_follows_docstring",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "rule_type_hints",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "rule_regression_tests",
+      "passed": false,
+      "detail": "RULE: add tests/test_regressions.py with one test function per bug you fixed (at least 3); the file must pass."
+    },
+    {
+      "name": "rule_changelog",
+      "passed": false,
+      "detail": "RULE: record each fix in CHANGELOG.md under the heading '## Unreleased' as a bullet '- fix(<function name>): <short description>' (at least 3 bullets)."
+    }
+  ]
+}

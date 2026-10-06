@@ -33,16 +33,20 @@
 
 | Tác vụ | Check thất bại | Nhóm lỗi (A-G) | Bằng chứng (trích ngắn từ `detail` hoặc vết) |
 |---|---|---|---|
-| | | | |
+| code-learn | rule_regression_tests | E | `RULE: add tests/test_regressions.py with one test function per bug you fixed (at least 3); the file must pass.` |
+| code-learn | rule_changelog | E | `RULE: record each fix in CHANGELOG.md under the heading '## Unreleased' as a bullet '- fix(<function name>): <short description>'` |
+| logs-learn | rule_service_names | E | `RULE: service names in the output are lower-case with '-' replaced by '_' (payment-service -> payment_service).` |
+| logs-learn | rule_sorted_errors | E | `RULE: errors is sorted by service, then by timestamp_utc, ascending.` |
+| logs-learn | rule_schema_header | E | `RULE: the top-level object has "schema_version": 2 and "generated_by": "log-triage".` |
 
-Nhận xét: nhóm lỗi nào chiếm đa số? Skill có thể phòng ngừa nhóm đó không?
+Nhận xét: **toàn bộ 5 check thất bại của baseline thuộc nhóm E (vi phạm quy ước tổ chức)**; đây là các check có tên `rule_` và `detail` mở đầu bằng `RULE:`, không được nêu trong đề. Bằng chứng phủ định cho nhóm A-D: `scripts/check_breakdown.py` báo baseline (learn) đạt **18/18 check kỹ thuật** nhưng chỉ **4/9 check quy ước** — tác tử luôn đọc README/docstring và kiểm chứng kết quả (nhóm A-D đạt), chỉ thiếu các quy ước ẩn. Một skill có thể phòng ngừa nhóm E: một checklist buộc tác tử tìm và áp dụng quy ước tổ chức ẩn (tệp CHANGELOG, tệp test hồi quy, khối `meta`, đơn vị tiền, `schema_version`, thứ tự sắp xếp) trước khi kết thúc. `data-learn` baseline đạt 8/8 nên không có dòng lỗi; ở điều kiện `subagents` nó tụt còn 5/8 (cùng nhóm E) — xem mục 5.
 
 ## 5. Điều kiện `subagents` (Phần 2.3)
 
-- Các subagent đã định nghĩa (tên, vai trò, lý do thiết kế):
-- `subagent_calls` ở từng tác vụ và nhận xét (kể cả trường hợp bằng 0):
-- Thông tin thiếu hoặc thừa khi giao việc (nếu có giao việc):
-- Ảnh hưởng đến token và thời gian:
+- Các subagent đã định nghĩa (tên, vai trò, lý do thiết kế): `explorer` (đọc README/docstring/mẫu dữ liệu, chỉ báo cáo, không sửa — tách việc thu thập yêu cầu khỏi việc sửa); `implementer` (thực hiện thay đổi và chạy test — tách việc sinh mã); `reviewer` (kiểm tra độc lập kết quả và trường hợp biên, không sửa — tạo "cặp mắt thứ hai"). Ba vai trò tách biệt để giảm việc một ngữ cảnh vừa viết vừa tự chấm.
+- `subagent_calls` ở từng tác vụ và nhận xét: **bằng 1 ở cả ba tác vụ học** (code-learn, data-learn, logs-learn). Ở cả ba, tác tử chính gọi đúng subagent `reviewer` để kiểm tra độc lập (`### Tool call: task`, mô tả mở đầu "Independently review/verify..."), không dùng `explorer`/`implementer`. Tác tử chính tự làm phần chính rồi mới giao khâu kiểm tra.
+- Thông tin thiếu hoặc thừa khi giao việc: lời giao việc rất chi tiết và có nêu quy ước đường dẫn tương đối, đúng tinh thần context isolation. Tuy nhiên ở `data-learn`, lời giao việc **khẳng định sai** rằng "There is no 'Acme reporting conventions' document anywhere in the sandbox", nên cả nhóm bỏ qua 3 quy ước ẩn (`rule_money_in_cents`, `rule_meta_block`, `rule_clean_csv`) và điểm tụt từ 8/8 (baseline) xuống 5/8. Báo cáo của `reviewer` có được kiểm tra và dùng, nhưng bản thân nó cũng không biết quy ước.
+- Ảnh hưởng đến token và thời gian: `subagents` tốn trung bình **400.770 token/lần** so với **309.084 token/lần** của baseline trên tác vụ học (khoảng +30%) và thời gian cao hơn (code-learn 171,5s so với 109,2s; logs-learn 160,2s so với 28,1s). Đa tác tử **không cải thiện điểm** (house rules thậm chí giảm 4/9 → 1/9; technical giữ 18/18) nên không đáng chi phí trong thí nghiệm này.
 
 ## 6. Self-evolving: skill do curator sinh (Phần 3)
 

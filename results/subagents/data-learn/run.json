@@ -1,0 +1,64 @@
+{
+  "task": "data-learn",
+  "condition": "subagents",
+  "role": "learn",
+  "error": null,
+  "timestamp": "2026-10-06T08:55:23.336327+00:00",
+  "skills_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "seconds": 113.0,
+  "tokens": {
+    "input": 357083,
+    "output": 20366,
+    "total": 377449
+  },
+  "tool_calls": 15,
+  "subagent_calls": 1,
+  "skills_read": 0,
+  "skills_modified": false,
+  "final_message": "**Created: `workspace/answer.json`** (the only file I added; the `workspace/` folder otherwise contains only the original `README.md` and `sales.csv`).\n\n```json\n{\n  \"duplicate_rows_removed\": 7,\n  \"missing_amount_orders\": 8,\n  \"north_q1_orders\": 10,\n  \"north_q1_revenue\": 3130.24,\n  \"top_region\": \"North\"\n}\n```\n\n**How I cleaned and analysed the data**\n\n- **Deduplication:** 101 data rows contained 7 `order_id`s repeated twice (re-exports: `S-1009, S-1021, S-1022, S-1024, S-1053, S-1072, S-1087`), keeping one row per order → 94 distinct orders, so `duplicate_rows_removed = 7`. The repeats were byte-identical, so the choice of which row to keep doesn't change any total.\n- **Region normalisation:** trimmed surrounding spaces and folded case (`west`, `NORTH`, `East `, …) into `North/South/East/West` before grouping.\n- **Dates:** parsed all three documented formats — `YYYY-MM-DD`, `DD/MM/YYYY` (treated as 00:00 UTC) and ISO-8601 with offsets — and converted every timestamp to UTC before the Q1 window test (2024-01-01 00:00:00Z inclusive to 2024-03-31 23:59:59Z inclusive). This matters for the `S-200x` rows: `S-2003` has a *2023* local date but is 2024-01-01T02:00Z (counts), while `S-2002` and `S-2000` have in-window local dates but fall outside Q1 in UTC.\n- **Missing amounts:** `-999` was treated as unknown, never summed; 8 distinct orders have a missing amount.\n- `north_q1_orders` counts the **distinct orders actually counted in the revenue** (missing-amount ones excluded, in line with \"must not be added to any revenue\"): 10 orders summing to 3130.24. If it were instead read as \"all North orders in Q1 regardless of amount\", the figure would be 13 — flagging that ambiguity.\n- **Top region:** North 9504.47 > South 9136.24 > East 8790.82 > West 8475.68.\n\nNote: no \"Acme reporting conventions\" document exists anywhere in the sandbox (only `README.md` and `sales.csv`), so I kept `answer.json` to exactly the five requested keys; the data-handling rules in `README.md` are what I applied. An independent verifier recomputed every metric with a from-scratch implementation and reproduced all five values exactly.",
+  "score": 0.625,
+  "passed": 5,
+  "total": 8,
+  "checks": [
+    {
+      "name": "north_q1_revenue",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "north_q1_orders",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "top_region",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "missing_amount_orders",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "duplicate_rows_removed",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "rule_money_in_cents",
+      "passed": false,
+      "detail": "RULE: money values in answer.json are integer cents (1606.67 USD is written 160667)."
+    },
+    {
+      "name": "rule_meta_block",
+      "passed": false,
+      "detail": "RULE: answer.json has an object `meta` = {\"source\": <input file name>, \"rows_in\": <number of data rows in the input file, duplicates included>, \"rows_used\": <number of distinct orders with a known amount>}."
+    },
+    {
+      "name": "rule_clean_csv",
+      "passed": false,
+      "detail": "RULE: write workspace/clean.csv with the header order_id,timestamp_utc,region,amount_cents; one row per distinct order with a known amount; timestamp_utc as YYYY-MM-DDTHH:MM:SSZ (UTC); region in canonical spelling (North, South, East, West); amount in integer cents."
+    }
+  ]
+}
