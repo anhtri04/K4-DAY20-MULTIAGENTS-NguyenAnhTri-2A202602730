@@ -11,7 +11,7 @@
 - Nhà cung cấp và mô hình (`LAB_MODEL`, không ghi khóa API), nhiệt độ (`LAB_TEMPERATURE`), `recursion_limit`: DeepSeek qua endpoint tương thích OpenAI (`LAB_BASE_URL=https://api.deepseek.com`), `LAB_MODEL=deepseek-flash`, `LAB_TEMPERATURE=0`, `recursion_limit=60`. Khóa API chỉ nằm trong `.env` (đã bỏ qua bởi git).
 - Phiên bản Deep Agents (`pip show deepagents`), hệ điều hành, chạy trực tiếp hay trong Docker: deepagents 0.7.21, Python 3.14, Linux, chạy trực tiếp trong `.venv` (không dùng Docker).
 - Số lần chạy tác vụ đã dùng / ngân sách: đến hết Phần 3 đã dùng **9 lần chạy** (3 baseline learn, 3 subagents learn, 3 skills-auto learn) + 1 lần gọi curator. Ngân sách: dùng khóa DeepSeek cá nhân, không giới hạn cứng.
-- Commit của tag `freeze`: (chưa đóng băng - điền ở Phần 4.1).
+- Commit của tag `freeze`: `1335eeb` (tag `freeze`, tạo 2026-10-06T16:09:29+07:00); commit `hypotheses` ngay trước là `916bcdf`.
 
 ## 2. Giả thuyết (commit TRƯỚC tag `freeze`, Phần 4.0)
 
@@ -63,35 +63,75 @@ Nhận xét Phần 3.4: cả hai skill đều được **đọc** ở mọi tác
 
 > Dán nội dung `report/table.md` và kết quả `python scripts/check_breakdown.py`. Nêu các lần chạy có `error` hoặc `skills_modified = true` (nếu có) và cách xử lý.
 
+`report/table.md` (`python -m lab.compare`):
+
 ```text
-(dán bảng ở đây)
+| Task | baseline | subagents | skills-auto |
+|---|---|---|---|
+| code-learn | 8/10 | 8/10 | 9/10 |
+| data-learn | 8/8 | 5/8 | 8/8 |
+| logs-learn | 6/9 | 6/9 | 6/9 |
+| code-eval | 8/11 | 7/11 | 10/11 |
+| data-eval | 5/9 | 5/9 | 6/9 |
+| logs-eval | 10/10 | 6/10 | 6/10 |
+| **Mean score - learning tasks** | 0.82 | 0.70 | 0.86 |
+| **Mean score - evaluation tasks** | 0.76 | 0.60 | 0.73 |
+| **Mean tokens per run** | 302,006 | 382,653 | 302,856 |
+| **Runs that read a skill** | 0/6 | 0/6 | 6/6 |
 ```
+
+`python scripts/check_breakdown.py` (tách check kỹ thuật và check quy ước `rule_`):
+
+```text
+condition     role    technical  house rules  mean tokens  read a skill
+baseline      eval     18/18         5/12         294,927      0/3
+baseline      learn    18/18         4/9          309,084      0/3
+subagents     eval     18/18         0/12         364,537      0/3
+subagents     learn    18/18         1/9          400,770      0/3
+skills-auto   eval     18/18         4/12         274,667      3/3
+skills-auto   learn    18/18         5/9          331,045      3/3
+```
+
+`python scripts/verify_freeze.py`: **OK** (6 lần chạy `skills-auto`; hash skill khớp bộ đóng băng, `skills_modified=false`, mọi lần chạy sau tag). Không có lần chạy nào có `error` khác `None` và không có lần nào `skills_modified=true`.
 
 ## 8. Phân tích
 
 > Trả lời từng câu bằng số liệu từ mục 7 và bằng chứng từ vết. Kết quả âm hoặc không có khác biệt vẫn hợp lệ nếu được phân tích tốt.
 
-1. So với `baseline`, điều kiện nào cải thiện điểm tác vụ **học**? Điều kiện nào cải thiện điểm tác vụ **đánh giá**? Có điều kiện nào cải thiện tác vụ học nhưng không cải thiện tác vụ đánh giá? Nếu có, đó là dấu hiệu gì?
-2. Tách điểm thành check kỹ thuật và check quy ước (`rule_`). Skill do curator sinh giúp nhóm check nào? Check quy ước **mới** của tác vụ đánh giá có được skill giúp không, và vì sao?
-3. Dựa vào vết và `skills_read`, giải thích một check mà skill giúp đạt và một check mà skill không giúp (skill chưa được đọc, đọc nhưng không làm theo, skill thiếu hoặc sai).
-4. Chi phí: so sánh số token trung bình giữa các điều kiện. Điều kiện nào có hiệu quả tốt nhất theo điểm trên mỗi token? Đa tác tử có đáng chi phí trong thí nghiệm này không?
-5. Có dấu hiệu rò rỉ dữ liệu hoặc quá khớp nào trong skill sinh ra không? Nhóm đã phòng tránh như thế nào?
-6. Nhiễu: so sánh điểm tác vụ học của cùng bộ skill ở Phần 3.4 (đã sao lưu) và sau đóng băng. Chênh lệch bao nhiêu? Nó cho biết điều gì về độ tin cậy của các chênh lệch trong bảng ở mục 7?
+1. **Tác vụ học:** chỉ `skills-auto` cải thiện so với `baseline` (mean 0.86 so với 0.82, +0.04); `subagents` giảm còn 0.70 (−0.12). **Tác vụ đánh giá:** không điều kiện nào cao hơn `baseline` (`baseline` 0.76; `skills-auto` 0.73; `subagents` 0.60). `skills-auto` cải thiện tác vụ **học** nhưng không cải thiện tác vụ **đánh giá** (khoảng cách learn−eval lớn nhất: 0.13 so với 0.06 của baseline và 0.10 của subagents) — đây là **dấu hiệu quá khớp**: lợi ích trên tác vụ học không chuyển sang tác vụ mới, đúng như SkillEvolBench dự đoán.
+2. Check kỹ thuật đạt **18/18 ở mọi điều kiện và mọi vai trò**, nên mọi khác biệt đều nằm ở check quy ước `rule_`. `skills-auto` nâng house rules tác vụ học 4/9 → 5/9 nhưng hạ nhẹ ở đánh giá (baseline 5/12 → 4/12). Cụ thể skill giúp: `code-eval` sửa được `rule_regression_tests` và `rule_changelog`; `data-eval` sửa được `rule_sorted_keys_format`. Quy ước **mới** của tác vụ đánh giá (`rule_version_bump` ở code; `rule_source_line` ở logs) **không được skill giúp**, vì các quy ước này chưa từng xuất hiện trong tác vụ học nên curator không thể sinh chỉ dẫn cho chúng — đúng với lập luận trong H2.
+3. **Check skill giúp đạt:** `code-eval` `rule_regression_tests`. `skills_read=2`; vết `results/skills-auto/code-eval/trace.md` có 12 lần nhắc `tests/test_regressions.py` và 8 lần `CHANGELOG.md` (baseline `skills_read=0` và trượt cả hai check) — tác tử đã theo skill `bugfix-regression-changelog`. **Check skill không giúp:** `data-eval` `rule_money_in_cents`. `skills_read=2` (đã đọc `output-schema-and-normalization`), nhưng tác tử vẫn ghi `"north_q1_revenue": 3130.24` (USD thập phân) thay vì integer cents và không tạo `clean.csv` → **đọc nhưng không làm theo**, do skill chỉ nói chung "units" chứ không nêu "cent".
+4. Chi phí: token trung bình/lần chạy `baseline` 302.006, `subagents` 382.653 (+27%), `skills-auto` 302.856. Trên tác vụ đánh giá: 294.927 / 364.537 / 274.667 token. Hiệu quả điểm trên token (đánh giá): `skills-auto` ≈ 0.264 điểm/100k token, `baseline` ≈ 0.258, `subagents` ≈ 0.164. **Đa tác tử không đáng chi phí** trong thí nghiệm này: điểm thấp hơn ở cả hai vai trò mà tốn token nhất.
+5. Không có **rò rỉ**: `validate_skill` từ chối mọi skill chứa `eval_markers()` và cả 2 skill đều hợp lệ (không có tên tác vụ đánh giá). Có **quá khớp**: mean learn tăng 0.82 → 0.86 trong khi mean eval giảm 0.76 → 0.73, và khoảng cách learn−eval của `skills-auto` lớn nhất; thêm nữa `logs-eval` rơi từ 10/10 (baseline) xuống 6/10 ở cả hai điều kiện có can thiệp.
+6. Nhiễu: cùng bộ skill, so `results/skills-auto-dev/` (Phần 3.4) với chạy sau đóng băng: `code-learn` 9/10 = 9/10, `logs-learn` 6/9 = 6/9, nhưng `data-learn` **5/8 so với 8/8 — lệch 3 check (~0.38 điểm)**. Mức nhiễu này **lớn hơn** phần lớn chênh lệch trong bảng mục 7 (ví dụ `skills-auto` − `baseline` ở eval chỉ 0.03), nên các khác biệt nhỏ giữa điều kiện là **không đáng tin** với n=1. Chỉ hiệu ứng lớn (như `subagents` logs-eval 10/10 → 6/10) mới gợi ý thật.
 
 ## 9. Hạn chế và tính hợp lệ
 
 > Nêu ít nhất 3 hạn chế và ảnh hưởng của từng hạn chế đến kết luận (ví dụ: chỉ 3 tác vụ mỗi vai trò, mỗi cấu hình chạy một lần, nhiễu của mô hình, tác vụ do giảng viên thiết kế sẵn quy ước, chỉ một mô hình).
 
-1.
-2.
-3.
+1. Chỉ **3 tác vụ mỗi vai trò** và **mỗi cấu hình chạy một lần**; nhiễu giữa hai lần chạy cùng cấu hình lên tới ~0.38 điểm (`data-learn`). Vì vậy chỉ nên tin các hiệu ứng lớn; các chênh lệch nhỏ giữa điều kiện chưa kết luận được.
+2. Tác vụ do giảng viên thiết kế với quy ước ẩn (nhóm E); tác vụ đánh giá thêm một quy ước **mới chưa từng thấy**. Điều này bất lợi có hệ thống cho skill tự sinh (không thể suy ra quy ước chưa gặp) và có thể thiên vị `baseline` may mắn (logs-eval 10/10).
+3. Chỉ dùng **một mô hình** (`deepseek-flash`, temperature 0) và một phiên bản deepagents; kết luận về "đa tác tử" và "skill tự sinh" không suy rộng được sang mô hình khác.
+4. **Chi phí token bị chi phối bởi ngữ cảnh tích lũy** (mỗi lần gọi gửi lại toàn bộ lịch sử), nên token/lần chạy biến động mạnh và không phản ánh trực tiếp "công sức suy luận"; so sánh token giữa điều kiện vì thế chỉ mang tính tương đối.
+5. **Curator chạy một lần** và có tính ngẫu nhiên: bộ skill là một mẫu duy nhất, không lặp lại; không loại trừ việc chạy lại curator cho bộ skill tốt hơn hoặc tệ hơn.
 
 ## 10. Kết luận
 
-> Tối đa 5 câu. Chỉ khẳng định điều số liệu hỗ trợ. Nêu một đề xuất cải tiến tiếp theo.
+Trên bộ 6 tác vụ này, kỹ thuật đạt 18/18 ở mọi điều kiện nên toàn bộ khác biệt nằm ở các quy ước tổ chức ẩn. Đa tác tử (`subagents`) làm giảm điểm ở cả hai vai trò (learn 0.70, eval 0.60) trong khi tốn thêm ~27% token so với baseline, nên không đáng chi phí. Skill tự sinh (`skills-auto`) cải thiện nhẹ tác vụ học (0.82 → 0.86) nhưng không cải thiện tác vụ đánh giá (0.76 → 0.73) và khoảng cách học−đánh giá lớn nhất — dấu hiệu quá khớp, khớp với SkillsBench/SkillEvolBench. Vì nhiễu một lần chạy lên tới ~0.38 điểm, các kết luận này chỉ mang tính gợi ý. Đề xuất tiếp theo: lặp mỗi điều kiện ≥ 3 lần trên tác vụ đánh giá (hướng 6e) để tách tín hiệu khỏi nhiễu, và bổ sung cơ chế giúp tác tử chủ động truy tìm quy ước ẩn thay vì chỉ dựa vào skill tự sinh.
 
 ## Phụ lục
 
 - Lệnh đã chạy (theo thứ tự):
-- Thử thách mở rộng (nếu có): hướng chọn, kết quả, nhận xét.
-- Ghi chú khác:
+  1. `pytest` (toàn bộ: 32 test đạt, sau khi hoàn tất 4 tệp).
+  2. `python -m lab.runner --condition baseline --tasks data-learn`
+  3. `python -m lab.runner --condition baseline --tasks code-learn logs-learn`
+  4. `python -m lab.runner --condition subagents --tasks learn`
+  5. `python -m lab.curator`
+  6. `python -m lab.runner --condition skills-auto --tasks learn`
+  7. `git commit -m hypotheses`; `mv results/skills-auto results/skills-auto-dev`; `git commit -m "freeze skills"`; `git tag freeze`
+  8. `python -m lab.runner --condition baseline --tasks eval`
+  9. `python -m lab.runner --condition subagents --tasks eval`
+  10. `python -m lab.runner --condition skills-auto --tasks all`
+  11. `python scripts/verify_freeze.py` (OK); `python -m lab.compare > report/table.md`; `python scripts/check_breakdown.py`.
+- Thử thách mở rộng (nếu có): không thực hiện.
+- Ghi chú khác: khóa API chỉ nằm trong `.env` (đã bỏ qua bởi git); đã quét `results/`, `report/`, `skills/` xác nhận không lộ khóa. Bộ skill Phần 3.4 được sao lưu tại `results/skills-auto-dev/` để so nhiễu.

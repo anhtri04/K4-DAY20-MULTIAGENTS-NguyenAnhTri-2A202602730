@@ -1,0 +1,79 @@
+{
+  "task": "code-eval",
+  "condition": "subagents",
+  "role": "eval",
+  "error": null,
+  "timestamp": "2026-10-06T09:19:55.978104+00:00",
+  "skills_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "seconds": 146.6,
+  "tokens": {
+    "input": 344842,
+    "output": 21263,
+    "total": 366105
+  },
+  "tool_calls": 37,
+  "subagent_calls": 1,
+  "skills_read": 0,
+  "skills_modified": false,
+  "final_message": "All fixed and verified. Final state: **35 tests pass** (`3` pre-existing + `32` new edge-case tests), and an independent review agent confirmed every documented behaviour with adversarial probes.\n\n## Summary of changes\n\n**`workspace/bookings/timeutil.py`** — `parse_duration` only understood `\"1h30m\"` and raised `ValueError` for everything else, contradicting its docstring. Rewrote it with four module-level compiled patterns to cover all documented formats (`\"2h\"`, `\"45m\"`, `\"1:30\"`, bare `\"45\"` minutes), stripping surrounding whitespace and still raising `ValueError` for unsupported or non-string input.\n\n**`workspace/bookings/billing.py`** — `billable_blocks` used `round()`, which does banker's rounding (`20/15 -> 1`) instead of always rounding up, and never rejected negative minutes. Now it raises `ValueError` for `minutes < 0` (and for a non-positive `block`) and rounds up with integer-safe arithmetic (`-(-minutes // block)`), avoiding the float-precision loss of `math.ceil(minutes / block)`.\n\n**`workspace/bookings/schedule.py`** — `add_slot` had a mutable default argument (`slots=[]`) that was mutated and returned, so calls shared state. It now uses `slots=None` and returns a new list (`[*slots, slot]`), leaving the caller's list untouched.\n\n**`workspace/tests/test_edge_cases.py`** (new; existing test files untouched) — parametrised tests for every documented duration format, rejection of bad input, round-up billing (including custom block sizes), and `add_slot` state isolation/non-mutation.\n\n**`workspace/CHANGELOG.md`** — recorded the three fixes under the existing \"Unreleased\" heading.",
+  "score": 0.6363636363636364,
+  "passed": 7,
+  "total": 11,
+  "checks": [
+    {
+      "name": "visible_suite_passes",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "tests_not_modified",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "parse_duration_all_formats",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "other_caller_fixed",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "billable_blocks_round_up",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "add_slot_no_shared_state",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "negative_minutes_rejected",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "rule_type_hints",
+      "passed": false,
+      "detail": ""
+    },
+    {
+      "name": "rule_regression_tests",
+      "passed": false,
+      "detail": ""
+    },
+    {
+      "name": "rule_changelog",
+      "passed": false,
+      "detail": ""
+    },
+    {
+      "name": "rule_version_bump",
+      "passed": false,
+      "detail": ""
+    }
+  ]
+}

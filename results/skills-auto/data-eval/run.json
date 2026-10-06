@@ -1,0 +1,69 @@
+{
+  "task": "data-eval",
+  "condition": "skills-auto",
+  "role": "eval",
+  "error": null,
+  "timestamp": "2026-10-06T09:30:25.624539+00:00",
+  "skills_sha256": "3fcbc186d8b3109877a5ce8bbb4773b68f6220f0447f48c0e02ad2055e0449e0",
+  "seconds": 84.4,
+  "tokens": {
+    "input": 368224,
+    "output": 8497,
+    "total": 376721
+  },
+  "tool_calls": 30,
+  "subagent_calls": 0,
+  "skills_read": 2,
+  "skills_modified": false,
+  "final_message": "Done — created `workspace/answer.json` (nothing else changed; temp scripts were removed).\n\n**How I cleaned the data**\n- **Deduplication**: the file holds 88 events but only 83 distinct `id`s; 5 events were repeat deliveries (A-2006, A-2011, A-2026, A-2047, A-2058). I kept the first event per `id`, so `duplicate_events_removed = 5`.\n- **Totals**: strings like `\"1,250.00\"` had their thousands separators stripped and were parsed as numbers; the sentinel `-1` (7 distinct orders) was treated as *unknown/missing* and never added to any revenue → `missing_total_orders = 7`.\n- **Timestamps**: every `placed_at` was converted to UTC before month bucketing (offsets `Z`, `+07:00`, `-05:00`, and `+00:00`). This matters for boundary probes: `A-3001` (2024-04-01T01:00+07:00 → 2024-03-31 UTC) is *in* March, while `A-3002` (2024-03-31T22:30-05:00 → 2024-04-01 UTC) is *not*.\n- **Categories**: stripped surrounding whitespace and lowercased (`\" garden \"`, `GARDEN`, `Garden` → `garden`), then aggregated revenue over the whole file.\n\n**Results**: `march_revenue_utc = 52957.19` over `march_orders_utc = 44` distinct orders (48 distinct March orders, 4 of them with unknown totals), `top_category = \"toys\"` (29,876.24 vs garden 27,650.71, music 21,923.27, books 13,959.95), `missing_total_orders = 7`, `duplicate_events_removed = 5`.\n\n**Conventions applied**: field names/case as specified, money rounded to 2 decimals, JSON written with sorted keys, 2-space indent and a trailing newline, plus the reporting metadata block (`schema_version`, `generated_by`). All values were reproduced by two structurally independent implementations that agreed exactly.",
+  "score": 0.6666666666666666,
+  "passed": 6,
+  "total": 9,
+  "checks": [
+    {
+      "name": "march_revenue_utc",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "march_orders_utc",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "top_category",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "missing_total_orders",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "duplicate_events_removed",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "rule_money_in_cents",
+      "passed": false,
+      "detail": ""
+    },
+    {
+      "name": "rule_meta_block",
+      "passed": false,
+      "detail": ""
+    },
+    {
+      "name": "rule_clean_csv",
+      "passed": false,
+      "detail": ""
+    },
+    {
+      "name": "rule_sorted_keys_format",
+      "passed": true,
+      "detail": ""
+    }
+  ]
+}

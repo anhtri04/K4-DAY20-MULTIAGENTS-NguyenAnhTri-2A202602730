@@ -1,0 +1,79 @@
+{
+  "task": "code-eval",
+  "condition": "skills-auto",
+  "role": "eval",
+  "error": null,
+  "timestamp": "2026-10-06T09:28:08.921714+00:00",
+  "skills_sha256": "3fcbc186d8b3109877a5ce8bbb4773b68f6220f0447f48c0e02ad2055e0449e0",
+  "seconds": 60.3,
+  "tokens": {
+    "input": 192295,
+    "output": 9428,
+    "total": 201723
+  },
+  "tool_calls": 31,
+  "subagent_calls": 0,
+  "skills_read": 2,
+  "skills_modified": false,
+  "final_message": "All 14 tests pass (the 3 visible ones plus 11 new regression tests), and the docstring contracts are verified end-to-end.\n\n**Bugs fixed**\n\n1. `bookings/timeutil.py` — `parse_duration` only matched `\"1h30m\"`, so `\"2h\"`, `\"45m\"`, `\"1:30\"` and bare `\"45\"` all raised `ValueError`. It now full-matches each documented format in turn (hours+minutes, hours, minutes, clock, bare minutes) and raises `ValueError` for anything else; whitespace is still stripped.\n2. `bookings/billing.py` — `billable_blocks` used `round()` (which even rounded down and used banker's rounding), so a partial block wasn't billed as a full block. It now always rounds up with `math.ceil`, and rejects negative `minutes` with `ValueError` as the docstring requires.\n3. `bookings/schedule.py` — `add_slot(slot, slots=[])` used a mutable default argument: it mutated the caller's list and leaked state between calls (`add_slot(\"a\")` then `add_slot(\"b\")` returned `[\"a\",\"b\"]`). The default is now `None` and the function builds and returns a new list without touching the input.\n\nAlso added consistent type hints (`parse_duration`, `billable_blocks`, `total_minutes`, `add_slot`, `slot_end` in `bookings/calendar_export.py`) and `Raises:` notes, following the package's existing docstring style.\n\n**Files changed**\n\n- `workspace/bookings/timeutil.py`\n- `workspace/bookings/billing.py`\n- `workspace/bookings/schedule.py`\n- `workspace/bookings/calendar_export.py` (type hints only, behaviour unchanged)\n- `workspace/tests/test_regressions.py` (new; `tests/test_bookings.py` left untouched)\n- `workspace/CHANGELOG.md` (3 bullets under `## Unreleased`)\n\n**Verification**: I copied the package to a scratch dir, restored the three original buggy functions, and re-ran the new test file — 8 of its tests fail on the old code and pass on the new code, so each fix has real regression coverage. The final run of `python -m pytest tests -q` from `workspace/` reports `14 passed`.",
+  "score": 0.9090909090909091,
+  "passed": 10,
+  "total": 11,
+  "checks": [
+    {
+      "name": "visible_suite_passes",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "tests_not_modified",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "parse_duration_all_formats",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "other_caller_fixed",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "billable_blocks_round_up",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "add_slot_no_shared_state",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "negative_minutes_rejected",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "rule_type_hints",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "rule_regression_tests",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "rule_changelog",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "rule_version_bump",
+      "passed": false,
+      "detail": ""
+    }
+  ]
+}

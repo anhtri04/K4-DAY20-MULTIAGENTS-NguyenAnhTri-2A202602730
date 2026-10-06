@@ -1,0 +1,74 @@
+{
+  "task": "code-learn",
+  "condition": "skills-auto",
+  "role": "learn",
+  "error": null,
+  "timestamp": "2026-10-06T09:29:10.227347+00:00",
+  "skills_sha256": "3fcbc186d8b3109877a5ce8bbb4773b68f6220f0447f48c0e02ad2055e0449e0",
+  "seconds": 74.5,
+  "tokens": {
+    "input": 190596,
+    "output": 8733,
+    "total": 199329
+  },
+  "tool_calls": 30,
+  "subagent_calls": 0,
+  "skills_read": 2,
+  "skills_modified": false,
+  "final_message": "All 12 tests pass (6 original + 6 new regression tests).\n\n## Bugs fixed (source code)\n\n**`inventory/pricing.py`**\n- `parse_price` didn't strip thousands separators (\",\" ) and ignored the accounting-style parentheses, so `\"$1,299.50\"` raised `InvalidOperation` and `\"(12.00)\"` was not negative. It now removes `$` and `,` and converts `(...)` into a negative value.\n- `apply_discount` used the default `ROUND_HALF_EVEN`, contradicting the docstring's \"round half up\" rule (`10.05` – 10 % gave `9.04` instead of `9.05`). Now quantizes to cents with `rounding=ROUND_HALF_UP`; the cents exponent is a module constant.\n\n**`inventory/report.py`**\n- `low_stock` used `<= threshold` instead of strictly below, and returned items in input order instead of alphabetically ignoring case. Now filters with `< threshold` and returns `sorted(names, key=str.lower)`.\n\n**`inventory/export.py`**\n- `to_csv_row` never applied RFC 4180 quoting. Names containing a comma or a double quote are now wrapped in double quotes with inner quotes doubled; price still formatted with 2 decimals.\n\n## Files added/changed\n- `workspace/inventory/pricing.py`, `workspace/inventory/report.py`, `workspace/inventory/export.py` – bug fixes.\n- `workspace/tests/test_regressions.py` – one focused regression test per bug (commas, accounting negative, half-up rounding, threshold + case-insensitive ordering, comma quoting, quote doubling). Each was verified to fail on the old code and pass now. Existing files in `tests/` were left untouched.\n- `workspace/CHANGELOG.md` – four entries under `## Unreleased`, one per fix, in `type(scope): description` form.",
+  "score": 0.9,
+  "passed": 9,
+  "total": 10,
+  "checks": [
+    {
+      "name": "visible_suite_passes",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "tests_not_modified",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "parse_price_all_formats",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "other_caller_fixed",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "discount_rounds_half_up",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "low_stock_follows_docstring",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "csv_quoting_follows_docstring",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "rule_type_hints",
+      "passed": false,
+      "detail": "RULE: every public function (name not starting with '_') in the package has type annotations on all parameters and on the return value."
+    },
+    {
+      "name": "rule_regression_tests",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "rule_changelog",
+      "passed": true,
+      "detail": ""
+    }
+  ]
+}
