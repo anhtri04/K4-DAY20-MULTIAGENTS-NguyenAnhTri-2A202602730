@@ -17,9 +17,9 @@
 
 > Dự đoán điều kiện nào đạt điểm cao nhất trên **tác vụ đánh giá** và vì sao. Nêu căn cứ từ phân loại lỗi (mục 4) và từ tài liệu tham khảo. Điền cả ba dòng; `verify_freeze.py` kiểm tra điều này.
 
-- H1 (subagents so với baseline):
-- H2 (skills-auto so với baseline):
-- H3 (tác vụ học so với tác vụ đánh giá):
+- H1 (subagents so với baseline): Trên **tác vụ đánh giá**, `subagents` **không cao hơn** `baseline` (dự đoán bằng hoặc thấp hơn), với chi phí token cao hơn. Căn cứ: ở tác vụ học, `subagents` đạt technical 18/18 như `baseline` nhưng house rules chỉ 1/9 (so với 4/9) và tốn 400.770 so với 309.084 token/lần; lỗi chủ đạo là nhóm E (quy ước ẩn) mà việc giao việc không khôi phục được do context isolation (data-learn: lời giao việc còn khẳng định sai là không có quy ước Acme).
+- H2 (skills-auto so với baseline): `skills-auto` sẽ **không cải thiện đáng kể** điểm tác vụ đánh giá so với `baseline` (chênh lệch trong khoảng nhiễu), dù có thể giúp một phần các check dạng chuẩn hóa/sắp xếp/metadata mà `output-schema-and-normalization` mô tả. Căn cứ: ở tác vụ học, cả hai skill đều được đọc (`skills_read=2`) nhưng chỉ `code-learn` tăng (8→9/10), `data-learn` giảm (8→5/8); tài liệu SkillsBench ghi nhận skill do mô hình tự sinh trung bình không có lợi và SkillEvolBench ghi nhận lợi ích trên tác vụ học thường không chuyển sang tác vụ mới (quá khớp). Quy ước **mới** của tác vụ đánh giá chưa từng xuất hiện trong tác vụ học nên skill khó phủ.
+- H3 (tác vụ học so với tác vụ đánh giá): Điểm **tác vụ đánh giá thấp hơn** tác vụ học ở cả ba điều kiện, vì tác vụ đánh giá thêm một quy ước mới. Khoảng cách (mean learn − mean eval) lớn nhất ở điều kiện nào "học" tốt nhất trên tác vụ học mà không khái quát được — nếu `skills-auto` cải thiện learn mà không cải thiện eval thì đó là bằng chứng quá khớp; ngược lại nếu `baseline` (không skill) có khoảng cách nhỏ nhất thì "học" không mang lại lợi ích chuyển giao.
 
 ## 3. Làm quen Deep Agents (Phần 0.3)
 
