@@ -80,6 +80,29 @@ def test_mode_switch_rebuilds_agent(tmp_path):
     store.close()
 
 
+def test_direct_workdir_edits_in_place(tmp_path):
+    workdir = tmp_path / "myproject"
+    workdir.mkdir()
+    (workdir / "hello.txt").write_text("hi")
+    store = _store(tmp_path)
+    session = store.create_session("baseline", workdir, sid=short_id(), direct=True)
+    model = ScriptedChatModel(script=[
+        AIMessage(content="", tool_calls=[{
+            "name": "write_file", "args": {"file_path": "workspace/out.txt", "content": "X"}, "id": "1"}]),
+        AIMessage(content="done"),
+    ])
+    sess = AgentSession(store, session, tmp_path, model=model, stream=False)
+    assert sess.direct and sess.work_path == workdir
+    assert (workdir / "workspace").is_symlink()
+
+    sess.send("write it")
+    assert (workdir / "out.txt").read_text() == "X"       # written in place, no copy
+    sess.cleanup()
+    assert not (workdir / "workspace").exists()           # symlink removed on exit
+    assert (workdir / "hello.txt").read_text() == "hi"    # user files untouched
+    store.close()
+
+
 def test_list_auto_skills_reads_frontmatter():
     skills = list_auto_skills()
     if skills:

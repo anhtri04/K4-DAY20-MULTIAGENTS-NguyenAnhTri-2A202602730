@@ -75,6 +75,22 @@ class StatusBar:
         return t
 
 
+def create_session(store: SessionStore, data_dir: Path, args: argparse.Namespace,
+                   mode: str, title: str = "", sid: str | None = None) -> dict:
+    """Create a session row: direct (work in --workdir) or copied under --data-dir."""
+    sid = sid or short_id()
+    if args.workdir:
+        workdir = Path(args.workdir).expanduser().resolve()
+        return store.create_session(mode, workdir, title=title, sid=sid, direct=True)
+    workspace_dir = data_dir / "sessions" / sid
+    session = store.create_session(mode, workspace_dir, title=title, sid=sid)
+    if args.workspace:
+        src = Path(args.workspace)
+        if src.exists():
+            shutil.copytree(src, workspace_dir / "workspace", dirs_exist_ok=True)
+    return session
+
+
 # --------------------------------------------------------------------------- CLI
 class Cli:
     def __init__(self, console: Console, store: SessionStore, sess: AgentSession,
@@ -88,24 +104,25 @@ class Cli:
         self._suppress_next_status = False
 
     # -- session factory ----------------------------------------------------
-    def _make_session(self, mode: str, title: str = "", seed_workspace: Path | None = None) -> AgentSession:
-        sid = short_id()
-        workspace_dir = self.data_dir / "sessions" / sid
-        session = self.store.create_session(mode, workspace_dir, title=title, sid=sid)
-        if seed_workspace is not None:
-            seed_workspace = Path(seed_workspace)
-            if seed_workspace.exists():
-                shutil.copytree(seed_workspace, workspace_dir / "workspace", dirs_exist_ok=True)
-        return AgentSession(self.store, session, self.data_dir, model=self.args.model_obj,
+    def _make_session(self, mode: str, title: str = "") -> AgentSession:
+        session = create_session(self.store, self.data_dir, self.args, mode, title=title)
+        sess = AgentSession(self.store, session, self.data_dir, model=self.args.model_obj,
                             recursion_limit=self.args.recursion_limit, stream=not self.args.no_stream)
+        self._print_warnings(sess)
+        return sess
+
+    def _print_warnings(self, sess: AgentSession) -> None:
+        for w in sess.warnings:
+            self.console.print(f"[yellow]warning:[/] {w}")
 
     # -- banner -------------------------------------------------------------
     def _banner(self) -> Panel:
         s = self.store.get_session(self.sess.session_id)
+        where = "[green]direct[/] " if self.sess.direct else ""
         body = Text.from_markup(
             f"[bold]mode[/] {self.sess.mode}   [bold]session[/] {self.sess.session_id}\n"
             f"[bold]model[/] {MODEL_ID}   [bold]recursion[/] {self.args.recursion_limit}\n"
-            f"[bold]workspace[/] {self.sess.sandbox / 'workspace'}\n"
+            f"[bold]workspace[/] {where}{self.sess.work_path}\n"
             f"[dim]slash: /quit /new /sessions /resume [id] /skills "
             f"/mode-baseline /mode-subagents /mode-skill /help[/]"
         )
@@ -194,9 +211,9 @@ class Cli:
         elif cmd == "/clear":
             self.console.clear()
         elif cmd == "/new":
+            self.sess.cleanup()
             title = " ".join(rest)
-            self.sess = self._make_session(self.sess.mode, title=title,
-                                           seed_workspace=self.args.workspace)
+            self.sess = self._make_session(self.sess.mode, title=title)
             self.last = None
             self.status = StatusBar(self.store.get_session(self.sess.session_id))
             self.console.clear()
@@ -228,11 +245,13 @@ class Cli:
         if not session:
             self.console.print(f"[red]no such session:[/] {arg}")
             return
+        self.sess.cleanup()
         self.sess = AgentSession(self.store, session, self.data_dir, model=self.args.model_obj,
                                  recursion_limit=self.args.recursion_limit,
                                  stream=not self.args.no_stream)
         self.console.clear()
         self.console.print(self._banner())
+        self._print_warnings(self.sess)
         self._replay()
 
     # -- rendering helpers --------------------------------------------------
@@ -325,7 +344,9 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--session", help="resume this session id on launch")
     ap.add_argument("--db", help="SQLite path (default <data-dir>/sessions.db)")
     ap.add_argument("--data-dir", help=f"session data dir (default {DATA_DIR})")
-    ap.add_argument("--workspace", help="seed a new session's workspace from this directory")
+    ap.add_argument("--workspace", help="seed a new session's workspace from this directory (copy)")
+    ap.add_argument("--workdir", "--dir", dest="workdir", metavar="DIR",
+                    help="work directly in DIR: the agent reads and writes it in place (no copy)")
     ap.add_argument("--recursion-limit", type=int, default=60)
     ap.add_argument("--no-stream", action="store_true", help="wait for the full answer")
     return ap
@@ -338,6 +359,12 @@ def main(argv=None) -> int:
     data_dir = Path(args.data_dir) if args.data_dir else DATA_DIR
     db_path = Path(args.db) if args.db else data_dir / "sessions.db"
     console = Console()
+    if args.workspace and args.workdir:
+        console.print("[red]--workspace and --workdir are mutually exclusive[/]")
+        return 1
+    if args.workdir and not Path(args.workdir).expanduser().is_dir():
+        console.print(f"[red]--workdir is not a directory:[/] {args.workdir}")
+        return 1
     store = SessionStore(db_path)
     args.model_obj = None  # build_agent falls back to make_model()
 
@@ -349,20 +376,16 @@ def main(argv=None) -> int:
         sess = AgentSession(store, session, data_dir, model=None,
                             recursion_limit=args.recursion_limit, stream=not args.no_stream)
     else:
-        sid = short_id()
-        workspace_dir = data_dir / "sessions" / sid
-        session = store.create_session(args.mode, workspace_dir, sid=sid)
-        if args.workspace:
-            src = Path(args.workspace)
-            if src.exists():
-                shutil.copytree(src, workspace_dir / "workspace", dirs_exist_ok=True)
+        session = create_session(store, data_dir, args, args.mode, sid=short_id())
         sess = AgentSession(store, session, data_dir, model=None,
                             recursion_limit=args.recursion_limit, stream=not args.no_stream)
 
     cli = Cli(console, store, sess, data_dir, args)
+    cli._print_warnings(sess)
     try:
         cli.run(replay=bool(args.session))
     finally:
+        sess.cleanup()
         store.close()
     return 0
 

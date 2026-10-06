@@ -79,6 +79,7 @@ class SessionStore:
                 title TEXT NOT NULL DEFAULT '',
                 mode TEXT NOT NULL,
                 workspace_dir TEXT NOT NULL,
+                direct INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
                 turn_count INTEGER NOT NULL DEFAULT 0,
@@ -115,17 +116,21 @@ class SessionStore:
             CREATE INDEX IF NOT EXISTS idx_turns_session ON turns(session_id, turn);
             """
         )
+        # migration for databases created before the `direct` column existed
+        cols = {r["name"] for r in self.conn.execute("PRAGMA table_info(sessions)").fetchall()}
+        if "direct" not in cols:
+            self.conn.execute("ALTER TABLE sessions ADD COLUMN direct INTEGER NOT NULL DEFAULT 0")
         self.conn.commit()
 
     # -- sessions -----------------------------------------------------------
     def create_session(self, mode: str, workspace_dir: Path | str, title: str = "",
-                       sid: str | None = None) -> dict:
+                       sid: str | None = None, direct: bool = False) -> dict:
         sid = sid or short_id()
         now = utc_now()
         self.conn.execute(
-            "INSERT INTO sessions (id, title, mode, workspace_dir, created_at, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (sid, title, mode, str(workspace_dir), now, now),
+            "INSERT INTO sessions (id, title, mode, workspace_dir, direct, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (sid, title, mode, str(workspace_dir), int(direct), now, now),
         )
         self.conn.commit()
         return self.get_session(sid)
@@ -301,22 +306,59 @@ class AgentSession:
         self.model = model
         self.recursion_limit = recursion_limit
         self.stream = stream
+        self.direct = bool(session.get("direct"))
         self.turn = int(session.get("turn_count", 0))
         self.agent = None
+        self.warnings: list[str] = []
+        self._created_workspace_link = False
+        self._created_skills_dir: Path | None = None
         self._ensure_workspace()
         self._build_agent()
 
     # -- setup --------------------------------------------------------------
+    @property
+    def work_path(self) -> Path:
+        """The directory the agent actually edits (the selected dir in direct mode)."""
+        return self.sandbox if self.direct else self.sandbox / "workspace"
+
     def _ensure_workspace(self) -> None:
-        (self.sandbox / "workspace").mkdir(parents=True, exist_ok=True)
+        self.sandbox.mkdir(parents=True, exist_ok=True)
+        link = self.sandbox / "workspace"
+        if not self.direct:
+            link.mkdir(parents=True, exist_ok=True)
+            return
+        # direct mode: agent root is the selected dir; `workspace/` must resolve back inside it
+        if link.is_symlink():
+            return
+        if link.exists() and not link.is_dir():
+            raise ValueError(f"cannot use {self.sandbox}: a non-directory 'workspace' entry exists")
+        if link.is_dir():
+            self.warnings.append(
+                f"{self.sandbox} already has a real 'workspace/' folder; the agent will work inside it")
+            return
+        link.symlink_to(".")
+        self._created_workspace_link = True
 
     def _sync_skills(self) -> None:
         dst = self.sandbox / "skills"
         if dst.exists():
+            if self.direct:
+                self.warnings.append(f"direct mode: using the existing {dst} (skills/auto not copied)")
+                return
             shutil.rmtree(dst)
         if AUTO_SKILLS_DIR.exists():
             for skill in sorted(p for p in AUTO_SKILLS_DIR.iterdir() if (p / "SKILL.md").exists()):
                 shutil.copytree(skill, dst / skill.name, dirs_exist_ok=True)
+            if self.direct:
+                self._created_skills_dir = dst
+
+    def cleanup(self) -> None:
+        """Remove artifacts this session created in direct mode (never touches real files)."""
+        if self._created_skills_dir is not None and self._created_skills_dir.exists():
+            shutil.rmtree(self._created_skills_dir, ignore_errors=True)
+        link = self.sandbox / "workspace"
+        if self._created_workspace_link and link.is_symlink():
+            link.unlink(missing_ok=True)
 
     def _build_agent(self) -> None:
         mode, use_skills = MODES[self.mode]
