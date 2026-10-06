@@ -10,7 +10,7 @@
 
 - Nhà cung cấp và mô hình (`LAB_MODEL`, không ghi khóa API), nhiệt độ (`LAB_TEMPERATURE`), `recursion_limit`: DeepSeek qua endpoint tương thích OpenAI (`LAB_BASE_URL=https://api.deepseek.com`), `LAB_MODEL=deepseek-flash`, `LAB_TEMPERATURE=0`, `recursion_limit=60`. Khóa API chỉ nằm trong `.env` (đã bỏ qua bởi git).
 - Phiên bản Deep Agents (`pip show deepagents`), hệ điều hành, chạy trực tiếp hay trong Docker: deepagents 0.7.21, Python 3.14, Linux, chạy trực tiếp trong `.venv` (không dùng Docker).
-- Số lần chạy tác vụ đã dùng / ngân sách: 1 lần chạy `data-learn` baseline ở Phần 1 (8/8, ~500k token).
+- Số lần chạy tác vụ đã dùng / ngân sách: đến hết Phần 3 đã dùng **9 lần chạy** (3 baseline learn, 3 subagents learn, 3 skills-auto learn) + 1 lần gọi curator. Ngân sách: dùng khóa DeepSeek cá nhân, không giới hạn cứng.
 - Commit của tag `freeze`: (chưa đóng băng - điền ở Phần 4.1).
 
 ## 2. Giả thuyết (commit TRƯỚC tag `freeze`, Phần 4.0)
@@ -50,11 +50,14 @@ Nhận xét: **toàn bộ 5 check thất bại của baseline thuộc nhóm E (v
 
 ## 6. Self-evolving: skill do curator sinh (Phần 3)
 
-- Số lần chạy curator, số skill bị xóa và lý do:
+- Số lần chạy curator, số skill bị xóa và lý do: chạy curator **1 lần**, sinh **2 skill hợp lệ**, **không xóa** và **không chạy lại** (cả hai đều hợp lệ về định dạng và không rò rỉ định danh tác vụ đánh giá theo `validate_skill`). Không sửa tay nội dung skill.
 
 | Skill | Tổng quát hay riêng cho tác vụ học? | Đúng hay sai (nêu chỗ sai nếu có) | Độ dài, `description` và `skills_read` ở Phần 3.4 |
 |---|---|---|---|
-| | | | |
+| `bugfix-regression-changelog` | Tổng quát: nói về việc sửa lỗi, viết test hồi quy và ghi changelog, không nêu tên tệp/hàm/con số của tác vụ học | Đúng về ý chính (test hồi quy cho từng lỗi, chạy cả suite, ghi changelog đúng heading, tối thiểu số bullet). Chưa chính xác ở ví dụ định dạng bullet `type(scope): ...` trong khi quy ước thật là `fix(<function name>): ...`; vị trí tệp test nói chung chung ("required location"). Không gây hại. | 13 dòng; `description`: "Use when a task asks you to fix bugs in code and record or verify the changes."; được đọc ở **cả 3** tác vụ học (`skills_read=2`) |
+| `output-schema-and-normalization` | Tổng quát: nói về đầu ra có cấu trúc (JSON/CSV/log) với quy ước tên, sắp xếp, schema; không rò rỉ dữ liệu | Đúng và trúng: đối chiếu đúng các lỗi nhóm E (`rule_`) — chuẩn hóa định danh (hoa/thường, dấu phân cách), đơn vị/thời gian, sắp xếp theo khóa, thêm trường metadata/version bắt buộc, tự kiểm tra tệp cuối. Không có chỉ dẫn sai. | 13 dòng; `description`: "Use when producing structured output such as JSON, CSV, or logs that must follow explicit naming, sorting, or schema conventions."; được đọc ở **cả 3** tác vụ học (`skills_read=2`) |
+
+Nhận xét Phần 3.4: cả hai skill đều được **đọc** ở mọi tác vụ (`skills_read=2`), nhưng kết quả không đồng nhất: `code-learn` tăng 8/10 → 9/10, `logs-learn` giữ 6/9, còn `data-learn` **giảm 8/8 → 5/8** (mất cả 3 `rule_`). Đây là dấu hiệu "đọc nhưng không làm theo toàn bộ" (05_skill_quality mục 5) và của nhiễu giữa các lần chạy.
 
 ## 7. Kết quả so sánh (Phần 4.3, 4.4)
 
