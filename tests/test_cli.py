@@ -109,6 +109,62 @@ def test_list_auto_skills_reads_frontmatter():
         assert all(s.name and s.lines > 0 for s in skills)
 
 
+def test_agent_session_streams_tool_events(tmp_path):
+    store = _store(tmp_path)
+    sid = short_id()
+    session = store.create_session("baseline", tmp_path / "sessions" / sid, sid=sid)
+    model = ScriptedChatModel(script=[
+        AIMessage(content="", tool_calls=[{
+            "name": "read_file", "args": {"file_path": "workspace/a"}, "id": "c1"}]),
+        AIMessage(content="done"),
+    ])
+    sess = AgentSession(store, session, tmp_path, model=model, stream=True)
+    (sess.sandbox / "workspace" / "a").write_text("hi")
+
+    events = []
+    sess.send("read it", on_chunk=lambda _t: None, on_event=events.append)
+
+    pairs = [(e["kind"], e["name"]) for e in events]
+    assert ("tool_call", "read_file") in pairs
+    assert ("tool_result", "read_file") in pairs
+    assert pairs.index(("tool_call", "read_file")) < pairs.index(("tool_result", "read_file"))
+    call = next(e for e in events if e["kind"] == "tool_call")
+    assert call["args"]["file_path"] == "workspace/a"
+    store.close()
+
+
+def test_run_turn_shows_tool_activity(tmp_path):
+    """The live turn region must surface tool calls (name + key argument)."""
+    from types import SimpleNamespace
+
+    from rich.console import Console
+
+    from lab.cli import Cli, StatusBar
+
+    store = _store(tmp_path)
+    sid = short_id()
+    session = store.create_session("baseline", tmp_path / "sessions" / sid, sid=sid)
+    model = ScriptedChatModel(script=[
+        AIMessage(content="", tool_calls=[{
+            "name": "write_file",
+            "args": {"file_path": "workspace/o.txt", "content": "x"}, "id": "c1"}]),
+        AIMessage(content="all done"),
+    ])
+    sess = AgentSession(store, session, tmp_path, model=model, stream=True)
+    console = Console(record=True, width=100)
+    args = SimpleNamespace(no_stream=False, recursion_limit=60, workspace=None, model_obj=None)
+    cli = Cli(console, store, sess, tmp_path, args)
+    cli.status = StatusBar(store.get_session(sid))
+
+    cli._run_turn("write it")
+
+    out = console.export_text()
+    assert "write_file" in out
+    assert "workspace/o.txt" in out
+    assert "all done" in out.replace("\n", " ")
+    store.close()
+
+
 def test_streaming_renders_the_status_line_once(tmp_path):
     """Regression: chunk-by-chunk output must not print the status bar once per chunk."""
     from types import SimpleNamespace

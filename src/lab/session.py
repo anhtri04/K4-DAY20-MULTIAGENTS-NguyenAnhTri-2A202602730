@@ -232,6 +232,32 @@ def sum_usage(usage: UsageMetadataCallbackHandler) -> dict:
     return totals
 
 
+def tool_events(messages: list[BaseMessage], seen_calls: set, seen_results: set) -> list[dict]:
+    """Diff a message list into tool-call / tool-result events not emitted yet.
+
+    ``seen_calls`` / ``seen_results`` are caller-owned sets so the same full history can be
+    scanned repeatedly (as the ``values`` stream grows) without emitting duplicates.
+    """
+    events: list[dict] = []
+    for m in messages:
+        if isinstance(m, AIMessage):
+            for tc in m.tool_calls or []:
+                key = tc.get("id") or f"{tc.get('name')}|{tc.get('args')}"
+                if key in seen_calls:
+                    continue
+                seen_calls.add(key)
+                events.append({"kind": "tool_call", "name": tc.get("name") or "tool",
+                               "args": tc.get("args") or {}})
+        elif m.type == "tool":
+            key = getattr(m, "tool_call_id", None) or f"{getattr(m, 'name', None)}|{_content_text(m)}"
+            if key in seen_results:
+                continue
+            seen_results.add(key)
+            events.append({"kind": "tool_result", "name": getattr(m, "name", None) or "tool",
+                           "content": _content_text(m)})
+    return events
+
+
 def count_skill_reads(messages: list[BaseMessage]) -> int:
     names = set()
     for m in messages:
@@ -374,31 +400,46 @@ class AgentSession:
         self._build_agent()
 
     # -- one turn -----------------------------------------------------------
-    def send(self, text: str, on_chunk=None) -> TurnResult:
-        """Run one turn: replay stored history + ``text``, persist and return metrics."""
+    def send(self, text: str, on_chunk=None, on_event=None) -> TurnResult:
+        """Run one turn: replay stored history + ``text``, persist and return metrics.
+
+        ``on_chunk`` streams answer tokens; ``on_event`` streams structured tool activity as
+        ``{"kind": "tool_call"|"tool_result", ...}`` so the CLI can show what the agent is doing.
+        """
         history = self.store.get_messages(self.session_id)
         user = HumanMessage(content=text)
         inputs = history + [user]
         usage = UsageMetadataCallbackHandler()
         turn = self.turn + 1
         result = TurnResult(turn=turn, user_text=text)
+        seen_calls: set = set()
+        seen_results: set = set()
+
+        def emit_events(messages) -> None:
+            if on_event is None:
+                return
+            for event in tool_events(messages, seen_calls, seen_results):
+                on_event(event)
+
         t0 = time.perf_counter()
         final_state = None
         try:
             config = {"callbacks": [usage], "recursion_limit": self.recursion_limit}
-            if self.stream and on_chunk is not None:
+            if self.stream and (on_chunk is not None or on_event is not None):
                 for mode, data in self.agent.stream(
                     {"messages": inputs}, config=config, stream_mode=["messages", "values"]
                 ):
                     if mode == "messages":
                         chunk, meta = data
-                        if (isinstance(chunk, AIMessage) and meta.get("langgraph_node") == "model"
-                                and chunk.content):
+                        if (on_chunk is not None and isinstance(chunk, AIMessage)
+                                and meta.get("langgraph_node") == "model" and chunk.content):
                             on_chunk(str(chunk.content))
                     else:
                         final_state = data
+                        emit_events(data.get("messages", []))
             else:
                 final_state = self.agent.invoke({"messages": inputs}, config=config)
+                emit_events(final_state.get("messages", []))
         except Exception as exc:  # noqa: BLE001
             result.error = f"{type(exc).__name__}: {exc}"
 

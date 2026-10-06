@@ -164,25 +164,36 @@ class Cli:
         self.console.print(Panel(Text(text), title="[cyan]you[/]", title_align="left",
                                  border_style="cyan"))
         streamed = Text()
+        activity: list[Text] = []
 
         def view():
-            # answer and status live in the SAME region, so streaming never reprints the status
+            # answer, tool activity and status live in the SAME region so nothing is reprinted
+            parts = []
             if streamed.plain:
-                return Group(
-                    Panel(streamed, title="[green]assistant[/]", title_align="left",
-                          border_style="green"),
-                    self.status.render(),
-                )
-            return self.status.render()
+                parts.append(Panel(streamed, title="[green]assistant[/]", title_align="left",
+                                   border_style="green"))
+            if activity:
+                parts.append(Group(*activity))
+            if not parts:
+                return self.status.render()
+            parts.append(self.status.render())
+            return Group(*parts)
 
         self.status.label = "thinking"
 
         def on_chunk(tok: str) -> None:
             streamed.append(tok)
 
+        def on_event(event: dict) -> None:
+            activity.append(self._event_line(event))
+
         with Live(self.status.render(), console=self.console, refresh_per_second=12,
                   vertical_overflow="visible", get_renderable=view):
-            result = self.sess.send(text, on_chunk=on_chunk if not self.args.no_stream else None)
+            result = self.sess.send(
+                text,
+                on_chunk=on_chunk if not self.args.no_stream else None,
+                on_event=on_event,
+            )
             self.status.apply(result)
         self.console.print()
 
@@ -193,6 +204,23 @@ class Cli:
             self.console.print(Panel(result.error, title="[red]error[/]", border_style="red"))
         self.last = result
         self._suppress_next_status = True
+
+    def _event_line(self, event: dict) -> Text:
+        """Render one streamed tool event as a compact line for the live region."""
+        kind = event.get("kind")
+        name = event.get("name", "tool")
+        if kind == "tool_call":
+            t = Text("  ⚙ ", style="magenta")
+            t.append(name, style="bold magenta")
+            t.append(f"  {_call_summary(event.get('args'))}", style="dim")
+            return t
+        content = event.get("content", "")
+        failed = _looks_failed(content)
+        t = Text("     ↳ ", style="dim")
+        t.append(name, style="dim")
+        t.append(f" {'failed' if failed else 'ok'}  ", style="bold red" if failed else "green")
+        t.append(_brief(content, 120), style="red" if failed else "dim")
+        return t
 
     # -- slash commands -----------------------------------------------------
     def _handle_slash(self, raw: str) -> bool:
@@ -328,6 +356,21 @@ def _brief(value, limit: int = 90) -> str:
     text = value if isinstance(value, str) else str(value)
     text = " ".join(text.split())
     return text[:limit] + ("…" if len(text) > limit else "")
+
+
+def _call_summary(args) -> str:
+    """Pick the most informative argument of a tool call for the activity line."""
+    if not isinstance(args, dict) or not args:
+        return _brief(args)
+    for key in ("command", "file_path", "path", "pattern", "description"):
+        if key in args and args[key]:
+            return _brief(args[key], 100)
+    return _brief(args, 100)
+
+
+def _looks_failed(content: str) -> bool:
+    low = content.lower()
+    return low.startswith("error") or "traceback" in low or low.startswith("toolerror")
 
 
 # --------------------------------------------------------------------------- entry
