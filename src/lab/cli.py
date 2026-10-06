@@ -14,7 +14,7 @@ import shlex
 import shutil
 from pathlib import Path
 
-from rich.console import Console
+from rich.console import Console, Group
 from rich.live import Live
 from rich.markdown import Markdown
 from rich.panel import Panel
@@ -85,6 +85,7 @@ class Cli:
         self.data_dir = data_dir
         self.args = args
         self.last = None
+        self._suppress_next_status = False
 
     # -- session factory ----------------------------------------------------
     def _make_session(self, mode: str, title: str = "", seed_workspace: Path | None = None) -> AgentSession:
@@ -122,7 +123,9 @@ class Cli:
         if replay:
             self._replay()
         while True:
-            self.console.print(self.status.render())
+            if not self._suppress_next_status:
+                self.console.print(self.status.render())
+            self._suppress_next_status = False
             try:
                 raw = self.console.input("[bold cyan]›[/] ").strip()
             except (EOFError, KeyboardInterrupt):
@@ -143,28 +146,36 @@ class Cli:
     def _run_turn(self, text: str) -> None:
         self.console.print(Panel(Text(text), title="[cyan]you[/]", title_align="left",
                                  border_style="cyan"))
-        streamed = {"text": ""}
+        streamed = Text()
 
-        def on_chunk(tok: str) -> None:
-            streamed["text"] += tok
-            self.console.print(tok, end="", markup=False, highlight=False, soft_wrap=True)
+        def view():
+            # answer and status live in the SAME region, so streaming never reprints the status
+            if streamed.plain:
+                return Group(
+                    Panel(streamed, title="[green]assistant[/]", title_align="left",
+                          border_style="green"),
+                    self.status.render(),
+                )
+            return self.status.render()
 
         self.status.label = "thinking"
-        live = Live(self.status.render(), console=self.console, refresh_per_second=8,
-                    vertical_overflow="visible")
-        with live:
+
+        def on_chunk(tok: str) -> None:
+            streamed.append(tok)
+
+        with Live(self.status.render(), console=self.console, refresh_per_second=12,
+                  vertical_overflow="visible", get_renderable=view):
             result = self.sess.send(text, on_chunk=on_chunk if not self.args.no_stream else None)
             self.status.apply(result)
-            live.update(self.status.render())
+        self.console.print()
 
-        if streamed["text"]:
-            self.console.print()
-        elif result.assistant_text:
+        if not streamed.plain and result.assistant_text:
             self.console.print(Panel(Markdown(result.assistant_text), title="[green]assistant[/]",
                                      title_align="left", border_style="green"))
         if result.error:
             self.console.print(Panel(result.error, title="[red]error[/]", border_style="red"))
         self.last = result
+        self._suppress_next_status = True
 
     # -- slash commands -----------------------------------------------------
     def _handle_slash(self, raw: str) -> bool:

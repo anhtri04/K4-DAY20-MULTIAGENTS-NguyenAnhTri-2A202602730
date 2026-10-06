@@ -84,3 +84,29 @@ def test_list_auto_skills_reads_frontmatter():
     skills = list_auto_skills()
     if skills:
         assert all(s.name and s.lines > 0 for s in skills)
+
+
+def test_streaming_renders_the_status_line_once(tmp_path):
+    """Regression: chunk-by-chunk output must not print the status bar once per chunk."""
+    from types import SimpleNamespace
+
+    from rich.console import Console
+
+    from lab.cli import Cli, StatusBar
+
+    store = _store(tmp_path)
+    sid = short_id()
+    session = store.create_session("baseline", tmp_path / "sessions" / sid, sid=sid)
+    model = ScriptedChatModel(script=[AIMessage(content="one two three four five")])
+    sess = AgentSession(store, session, tmp_path, model=model, stream=True)
+    console = Console(record=True, width=100)
+    args = SimpleNamespace(no_stream=False, recursion_limit=60, workspace=None, model_obj=None)
+    cli = Cli(console, store, sess, tmp_path, args)
+    cli.status = StatusBar(store.get_session(sid))
+
+    cli._run_turn("hi")
+
+    out = console.export_text()
+    assert out.count("session tokens") == 1
+    assert "one two three four five" in out.replace("\n", " ")
+    store.close()
